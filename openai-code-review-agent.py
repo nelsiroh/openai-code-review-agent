@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+
 import os
 import argparse
-import openai
+from openai import OpenAI
 
-def review_file(file_path: str, model: str, temperature: float):
+
+def review_file(client: OpenAI, file_path: str, model: str, temperature: float):
     """
     Send the contents of file_path to OpenAI for a code review and print the response.
     """
@@ -10,14 +13,23 @@ def review_file(file_path: str, model: str, temperature: float):
         content = f.read()
 
     messages = [
-        {"role": "system", "content": "You are an expert AI code reviewer. Provide concise, actionable feedback focusing on correctness, style, best practices, and potential improvements."},
-        {"role": "user", "content": f"Please review the following file: {file_path}\n```\n{content}\n```"}
+        {
+            "role": "system",
+            "content": (
+                "You are an expert AI code reviewer. Provide concise, actionable feedback "
+                "focusing on correctness, style, best practices, and potential improvements."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Please review the following file: {file_path}\n```\n{content}\n```",
+        },
     ]
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model=model,
         messages=messages,
-        temperature=temperature
+        temperature=temperature,
     )
 
     review = response.choices[0].message.content.strip()
@@ -28,7 +40,13 @@ def review_file(file_path: str, model: str, temperature: float):
     print(separator)
 
 
-def traverse_and_review(root_dir: str, model: str, temperature: float, extensions: list):
+def traverse_and_review(
+    client: OpenAI,
+    root_dir: str,
+    model: str,
+    temperature: float,
+    extensions: list[str]
+):
     """
     Walk through root_dir, review each file with matching extensions, and pause after each.
     """
@@ -36,8 +54,7 @@ def traverse_and_review(root_dir: str, model: str, temperature: float, extension
         for filename in sorted(filenames):
             if any(filename.endswith(ext) for ext in extensions):
                 path = os.path.join(dirpath, filename)
-                review_file(path, model, temperature)
-                # Pause and ask user
+                review_file(client, path, model, temperature)
                 choice = input("Continue to next file? (y/n): ").strip().lower()
                 if choice != "y":
                     print("Stopping review.")
@@ -68,17 +85,25 @@ def main():
     parser.add_argument(
         "--ext",
         nargs="+",
-        default=[".py", ".js", ".ts", ".java", ".go", ".yaml", ".yml"],
+        default=[".py", ".js", ".ts", ".java", ".go", ".yaml", ".yml", ".tf"],
         help="File extensions to include in the review."
     )
     args = parser.parse_args()
 
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    if not openai.api_key:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
         print("Error: OPENAI_API_KEY environment variable not set.")
         return
 
-    traverse_and_review(args.root_dir, args.model, args.temperature, args.ext)
+    client = OpenAI(api_key=api_key)
+
+    traverse_and_review(
+        client,
+        args.root_dir,
+        args.model,
+        args.temperature,
+        args.ext,
+    )
 
 
 if __name__ == "__main__":
